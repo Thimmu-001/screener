@@ -52,35 +52,31 @@ export default function DashboardScreen() {
       ]);
 
       // Transform boosted tokens to display format
-      const allBoostedTokens = [...(boostedTop || []), ...(boostedLatest || [])];
-      const transformedTokens = allBoostedTokens
-        .filter(token => token && typeof token === 'object')
-        .map((token, index) => ({
-          ...token,
-          id: token.tokenAddress || `boosted-${index}`,
+      const allBoostedTokens = [...boostedTop, ...boostedLatest];
+      const transformedTokens = allBoostedTokens.map((token, index) => ({
+        ...token,
+        id: token.tokenAddress || `boosted-${index}`,
+        symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
+        name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
+        priceUsd: (Math.random() * 100).toFixed(6),
+        priceChange: { h24: (Math.random() - 0.5) * 20 },
+        volume: { h24: token.amount * 1000 + Math.random() * 50000 },
+        marketCap: token.amount * 10000 + Math.random() * 1000000,
+        liquidity: { usd: token.amount * 500 + Math.random() * 100000 },
+        chainId: 'ethereum',
+        address: token.tokenAddress,
+        boosted: true,
+        baseToken: {
           symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
           name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
-          priceUsd: (Math.random() * 100).toFixed(6),
-          priceChange: { h24: (Math.random() - 0.5) * 20 },
-          volume: { h24: token.amount * 1000 + Math.random() * 50000 },
-          marketCap: token.amount * 10000 + Math.random() * 1000000,
-          liquidity: { usd: token.amount * 500 + Math.random() * 100000 },
-          chainId: 'ethereum',
           address: token.tokenAddress,
-          boosted: true,
-          baseToken: {
-            symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
-            name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
-            address: token.tokenAddress,
-          }
-        }));
+        }
+      }));
 
       setBoostedTokens(transformedTokens.slice(0, 10));
       setTopTokens(transformedTokens.slice(0, 8));
     } catch (error) {
       console.error('Dashboard fetch error:', error);
-      setBoostedTokens([]);
-      setTopTokens([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -89,8 +85,7 @@ export default function DashboardScreen() {
 
   const fetchTrendingPairs = async () => {
     try {
-      // Use a default query likely to return trending pairs for each chain
-      const blockchains = [
+      const blockchains: { chain: string; query: string }[] = [
         { chain: "solana", query: "USDT" },
         { chain: "ETH", query: "USDT" },
         { chain: "bsc", query: "USDT" },
@@ -102,28 +97,27 @@ export default function DashboardScreen() {
       ];
       const searchPromises = blockchains.map(({ chain, query }) =>
         dexAPI.searchPairs(query).then(
-          (result) => {
+          (result: any) => {
             if (!result || !Array.isArray(result.pairs)) {
               console.warn('Unexpected result from searchPairs:', result);
               return { chain, pairs: [] };
             }
-            return { chain, pairs: result.pairs };
+            // Only keep pairs with required fields
+            const validPairs = result.pairs.filter(
+              (pair: any) => pair && typeof pair === 'object' && pair.pairAddress && pair.baseToken && pair.quoteToken
+            ).map((pair: any) => ({ ...pair, _chain: chain }));
+            return { chain, pairs: validPairs };
           }
-        ).catch((err) => {
+        ).catch((err: any) => {
           console.warn('Error fetching pairs for', chain, err);
           return { chain, pairs: [] };
         })
       );
       const searchResults = await Promise.all(searchPromises);
-      // Merge all pairs and annotate with chain
-      const allPairs = searchResults.reduce((acc: any[], result) => {
-        // Check if result exists and has the expected structure
-        if (result && typeof result === 'object' && result.chain && Array.isArray(result.pairs)) {
-          result.pairs.forEach((pair: any) => {
-            if (pair && typeof pair === 'object') {
-              acc.push({ ...pair, _chain: result.chain });
-            }
-          });
+      // Merge all pairs
+      const allPairs: TrendingPair[] = searchResults.reduce((acc: TrendingPair[], { pairs }) => {
+        if (Array.isArray(pairs)) {
+          acc.push(...pairs);
         }
         return acc;
       }, []);
@@ -147,9 +141,7 @@ export default function DashboardScreen() {
     const grouped: Record<string, any[]> = {};
     blockchains.forEach(chain => grouped[chain] = []);
     pairs.forEach(pair => {
-      if (pair && pair._chain && grouped[pair._chain]) {
-        grouped[pair._chain].push(pair);
-      }
+      if (grouped[pair._chain]) grouped[pair._chain].push(pair);
     });
     // Interleave
     const result: any[] = [];
@@ -157,7 +149,7 @@ export default function DashboardScreen() {
     while (added && result.length < 16) {
       added = false;
       for (const chain of blockchains) {
-        if (grouped[chain] && grouped[chain][i]) {
+        if (grouped[chain][i]) {
           result.push(grouped[chain][i]);
           added = true;
         }
@@ -326,10 +318,7 @@ export default function DashboardScreen() {
                 </TouchableOpacity>
               </View>
               
-              {boostedTokens
-                .filter(token => token && typeof token === 'object')
-                .slice(0, 6)
-                .map((token, index) => (
+              {boostedTokens.slice(0, 6).map((token, index) => (
                 <Animated.View 
                   key={token.id || token.tokenAddress || `boosted-${index}`} 
                   style={[
@@ -361,20 +350,18 @@ export default function DashboardScreen() {
                   <Ionicons name="trending-up" size={20} color="#10b981" />
                   <Text style={styles.sectionTitle}>Trending Pairs</Text>
                 </View>
-                <TouchableOpacity onPress={() => router.push('/(tabs)/tokens')}>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/tokens/detail')}>
                   <Text style={styles.viewAllText}>View All</Text>
                 </TouchableOpacity>
               </View>
-              {interleavePairs(trendingPairs, ["solana", "ETH", "bsc", "polygon", "arbitrum", "avalanche", "optimism", "base"])
-                .filter(pair => pair && typeof pair === 'object')
-                .map((pair, index) => (
+              {interleavePairs(trendingPairs, ["solana", "ETH", "bsc", "polygon", "arbitrum", "avalanche", "optimism", "base"]).map((pair, index) => (
                 <Animated.View 
                   key={`${pair.pairAddress || pair.id || pair.address || 'pair'}-${pair._chain || ''}-${index}`} 
                   style={{ opacity: fadeAnim, transform: [{ translateX: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [index % 2 === 0 ? 50 : -50, 0] }) }] }}
                 >
                   <TokenCard 
                     token={pair} 
-                    onPress={() => router.push({ pathname: '/(tabs)/tokens/detail', params: { token: JSON.stringify(pair) } } as any)}
+                    onPress={() => router.push(`/(tabs)/tokens/detail?token=${encodeURIComponent(JSON.stringify(pair))}`)}
                   />
                   <Text style={{ fontSize: 12, color: '#64748b', marginLeft: 8, marginBottom: 8 }}>Chain: {pair._chain}</Text>
                 </Animated.View>
@@ -538,3 +525,26 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     color: '#3b82f6',
   },
 });
+
+// Add types for trending pairs
+interface TrendingPair {
+  pairAddress: string;
+  baseToken: {
+    address: string;
+    symbol: string;
+    name: string;
+    [key: string]: any;
+  };
+  quoteToken: {
+    address: string;
+    symbol: string;
+    name: string;
+    [key: string]: any;
+  };
+  priceUsd?: number;
+  liquidity?: { usd?: number };
+  volume?: { h24?: number };
+  chainId?: string;
+  _chain?: string;
+  [key: string]: any;
+}
