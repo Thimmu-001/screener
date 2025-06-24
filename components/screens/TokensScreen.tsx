@@ -1,17 +1,17 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  useColorScheme,
   ActivityIndicator,
   RefreshControl,
   TextInput,
   Modal,
   Dimensions,
   Platform,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,15 +20,21 @@ import { TokenCard } from '@/components/ui/TokenCard';
 import { dexAPI } from '@/lib/api';
 import { useTokenStore } from '@/lib/store';
 import { useDebounce } from '@/hooks/useDebounce';
+import { useTheme } from '@/providers/ThemeProvider';
 
 const { width } = Dimensions.get('window');
 
 type SortOption = 'name' | 'price' | 'change' | 'volume' | 'marketCap';
 type ViewMode = 'grid' | 'list';
 
-export function TokensScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+
+interface TokensScreenProps {
+  autoFocusSearch?: boolean;
+}
+
+
+export function TokensScreen({ autoFocusSearch }: TokensScreenProps) {
+  const { isDark } = useTheme();
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useTokenStore();
   
   const [tokens, setTokens] = useState<any[]>([]);
@@ -43,6 +49,25 @@ export function TokensScreen() {
   
   const debouncedSearch = useDebounce(searchQuery, 300);
   const styles = getStyles(isDark);
+
+  // --- Autofocus and tap-to-focus logic ---
+  const inputRef = useRef<TextInput>(null);
+  const searchInputRef = useRef<TextInput>(null);
+  // Optionally, focus on mount if autoFocusSearch is true
+  useEffect(() => {
+    if (autoFocusSearch && searchInputRef.current) {
+      // Timeout ensures focus after navigation transition
+      const timeout = setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 350);
+      return () => clearTimeout(timeout);
+    }
+  }, [autoFocusSearch]);
+
+  // Handler to focus input when tapping anywhere in the search bar
+  const handleSearchBarPress = useCallback(() => {
+    inputRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     fetchTokens();
@@ -208,21 +233,28 @@ export function TokensScreen() {
       </View>
       
       {/* Search Bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={20} color={isDark ? '#64748b' : '#94a3b8'} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search tokens..."
-          placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-        {searchQuery ? (
-          <TouchableOpacity onPress={() => setSearchQuery('')}>
-            <Ionicons name="close" size={20} color={isDark ? '#64748b' : '#94a3b8'} />
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <TouchableWithoutFeedback onPress={() => searchInputRef.current?.focus()}>
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={isDark ? '#64748b' : '#94a3b8'} />
+          <TextInput
+            ref={searchInputRef}
+            style={styles.searchInput}
+            placeholder="Search tokens..."
+            placeholderTextColor={isDark ? '#64748b' : '#94a3b8'}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus={!!autoFocusSearch}
+            returnKeyType="search"
+            blurOnSubmit={true}
+            onSubmitEditing={() => searchInputRef.current?.blur()}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close" size={20} color={isDark ? '#64748b' : '#94a3b8'} />
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      </TouchableWithoutFeedback>
       
       {/* Controls */}
       <View style={styles.controls}>
@@ -351,8 +383,10 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     backgroundColor: isDark ? '#0f172a' : '#f8fafc',
   },
   listContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
+    backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+    borderRadius: 12,
+    padding: 8,
+    marginBottom: 16,
   },
   header: {
     paddingVertical: 16,
@@ -524,5 +558,33 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     fontFamily: 'Inter-SemiBold',
     color: isDark ? '#ffffff' : '#1e293b',
     marginTop: 12,
+  },
+  tokenItem: {
+    backgroundColor: isDark ? '#1e293b' : '#ffffff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  tokenSymbol: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: isDark ? '#f1f5f9' : '#0f172a',
+    marginBottom: 2,
+  },
+  tokenPrice: {
+    fontSize: 14,
+    color: isDark ? '#94a3b8' : '#64748b',
+  },
+  boostedBadge: {
+    backgroundColor: isDark ? '#fde047' : '#eab308',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginLeft: 8,
+  },
+  boostedBadgeText: {
+    fontSize: 10,
+    color: '#1e293b',
+    fontWeight: 'bold',
   },
 });

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  useColorScheme,
   RefreshControl,
   Dimensions,
 } from 'react-native';
@@ -15,12 +14,12 @@ import { LineChart } from 'react-native-chart-kit';
 import { TokenCard } from '@/components/ui/TokenCard';
 import { TokenDetailModal } from '@/components/modals/TokenDetailModal';
 import { useTokenStore } from '@/lib/store';
+import { useTheme } from '@/providers/ThemeProvider';
 
 const { width } = Dimensions.get('window');
 
 export function PortfolioScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { isDark } = useTheme();
   const { watchlist, portfolioValue, removeFromWatchlist } = useTokenStore();
   
   const [refreshing, setRefreshing] = useState(false);
@@ -275,7 +274,7 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     margin: 16,
     padding: 24,
     borderRadius: 16,
-    backgroundColor: '#3b82f6',
+    backgroundColor: isDark ? '#2563eb' : '#3b82f6',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
@@ -285,7 +284,7 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
   summaryLabel: {
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
-    color: '#bfdbfe',
+    color: isDark ? '#dbeafe' : '#bfdbfe',
     marginBottom: 8,
   },
   summaryValue: {
@@ -307,13 +306,14 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
   summarySubtext: {
     fontSize: 12,
     fontFamily: 'Inter-Regular',
-    color: '#bfdbfe',
+    color: isDark ? '#dbeafe' : '#bfdbfe',
   },
   chartContainer: {
-    margin: 16,
-    padding: 16,
+    marginHorizontal: 16,
+    marginBottom: 24,
     borderRadius: 16,
     backgroundColor: isDark ? '#1e293b' : '#ffffff',
+    padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -322,11 +322,12 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
   },
   chartTitle: {
     fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: isDark ? '#ffffff' : '#1e293b',
-    marginBottom: 16,
+    fontFamily: 'Inter-SemiBold',
+    color: isDark ? '#f1f5f9' : '#0f172a',
+    marginBottom: 8,
   },
   chart: {
+    marginVertical: 8,
     borderRadius: 16,
   },
   statsContainer: {

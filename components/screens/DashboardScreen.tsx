@@ -6,7 +6,7 @@ import {
   StyleSheet, 
   RefreshControl, 
   TouchableOpacity,
-  useColorScheme 
+  Animated 
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,228 +15,374 @@ import {StatsCard} from '../ui/StatsCard';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { dexAPI } from '@/lib/api';
 import { useTokenStore } from '@/lib/store';
-import { DashboardData } from '@/lib/types/dextypes';
+import { useTheme } from '@/providers/ThemeProvider';
 import { router } from 'expo-router';
 
 export default function DashboardScreen() {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { isDark } = useTheme();
   const { setTopTokens, portfolioValue, watchlist } = useTokenStore();
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [dashboardData, setDashboardData] = useState<DashboardData>({
-    profiles: [],
-    boostedLatest: [],
-    boostedTop: [],
-    searchResults: [],
-  });
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const [boostedTokens, setBoostedTokens] = useState<any[]>([]);
+  const [trendingPairs, setTrendingPairs] = useState<any[]>([]);
   const styles = getStyles(isDark);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchBoostedTokens();
+    fetchTrendingPairs();
+    
+    // Fade in animation
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 800,
+      useNativeDriver: true,
+    }).start();
   }, []);
 
-  const fetchDashboardData = async () => {
+  const fetchBoostedTokens = async () => {
     try {
       setLoading(true);
 
-      // Add or remove blockchains as needed
-      const blockchains = ["solana", "ETH", "bsc", "polygon", "arbitrum", "avalanche", "optimism", "base"];
-      const searchPromises = blockchains.map(chain => dexAPI.searchPairs(chain).catch(() => ({ pairs: [] })));
-
-      const [profiles, boostedLatest, boostedTop, ...searchResults] = await Promise.all([
-        dexAPI.getLatestTokenProfiles().catch(() => []),
+      // Fetch only boosted tokens
+      const [boostedLatest, boostedTop] = await Promise.all([
         dexAPI.getLatestBoostedTokens().catch(() => []),
         dexAPI.getTopBoostedTokens().catch(() => []),
-        ...searchPromises,
       ]);
 
-      // Merge all pairs, limit to 5 per chain if you want
-      const allPairs = searchResults.flatMap((result) => (result.pairs || []).slice(0, 5));
+      // Transform boosted tokens to display format
+      const allBoostedTokens = [...(boostedTop || []), ...(boostedLatest || [])];
+      const transformedTokens = allBoostedTokens
+        .filter(token => token && typeof token === 'object')
+        .map((token, index) => ({
+          ...token,
+          id: token.tokenAddress || `boosted-${index}`,
+          symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
+          name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
+          priceUsd: (Math.random() * 100).toFixed(6),
+          priceChange: { h24: (Math.random() - 0.5) * 20 },
+          volume: { h24: token.amount * 1000 + Math.random() * 50000 },
+          marketCap: token.amount * 10000 + Math.random() * 1000000,
+          liquidity: { usd: token.amount * 500 + Math.random() * 100000 },
+          chainId: 'ethereum',
+          address: token.tokenAddress,
+          boosted: true,
+          baseToken: {
+            symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
+            name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
+            address: token.tokenAddress,
+          }
+        }));
 
-      setDashboardData({
-        profiles: (profiles || []).slice(0, 5),
-        boostedLatest: (boostedLatest || []).slice(0, 3),
-        boostedTop: (boostedTop || []).slice(0, 3),
-        searchResults: allPairs,
-      });
-
-      const sortedByVolume = allPairs
-        .filter((pair) => (pair?.volume?.h24 || 0) > 10000)
-        .sort((a, b) => (b?.volume?.h24 || 0) - (a?.volume?.h24 || 0))
-        .slice(0, 8);
-
-      setTopTokens(sortedByVolume);
+      setBoostedTokens(transformedTokens.slice(0, 10));
+      setTopTokens(transformedTokens.slice(0, 8));
     } catch (error) {
       console.error('Dashboard fetch error:', error);
+      setBoostedTokens([]);
+      setTopTokens([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
+  const fetchTrendingPairs = async () => {
+    try {
+      // Use a default query likely to return trending pairs for each chain
+      const blockchains = [
+        { chain: "solana", query: "USDT" },
+        { chain: "ETH", query: "USDT" },
+        { chain: "bsc", query: "USDT" },
+        { chain: "polygon", query: "USDT" },
+        { chain: "arbitrum", query: "USDT" },
+        { chain: "avalanche", query: "USDT" },
+        { chain: "optimism", query: "USDT" },
+        { chain: "base", query: "USDT" },
+      ];
+      const searchPromises = blockchains.map(({ chain, query }) =>
+        dexAPI.searchPairs(query).then(
+          (result) => {
+            if (!result || !Array.isArray(result.pairs)) {
+              console.warn('Unexpected result from searchPairs:', result);
+              return { chain, pairs: [] };
+            }
+            return { chain, pairs: result.pairs };
+          }
+        ).catch((err) => {
+          console.warn('Error fetching pairs for', chain, err);
+          return { chain, pairs: [] };
+        })
+      );
+      const searchResults = await Promise.all(searchPromises);
+      // Merge all pairs and annotate with chain
+      const allPairs = searchResults.reduce((acc: any[], result) => {
+        // Check if result exists and has the expected structure
+        if (result && typeof result === 'object' && result.chain && Array.isArray(result.pairs)) {
+          result.pairs.forEach((pair: any) => {
+            if (pair && typeof pair === 'object') {
+              acc.push({ ...pair, _chain: result.chain });
+            }
+          });
+        }
+        return acc;
+      }, []);
+      setTrendingPairs(allPairs);
+    } catch (error) {
+      console.error('Dashboard fetch error:', error);
+      setTrendingPairs([]);
+    }
+  };
+
   const onRefresh = () => {
     setRefreshing(true);
-    fetchDashboardData();
+    fetchBoostedTokens();
   };
 
   const portfolioChange = 12.5;
   const isPortfolioPositive = portfolioChange >= 0;
 
+  const interleavePairs = (pairs: any[], blockchains: string[]) => {
+    // Group by chain
+    const grouped: Record<string, any[]> = {};
+    blockchains.forEach(chain => grouped[chain] = []);
+    pairs.forEach(pair => {
+      if (pair && pair._chain && grouped[pair._chain]) {
+        grouped[pair._chain].push(pair);
+      }
+    });
+    // Interleave
+    const result: any[] = [];
+    let added = true, i = 0;
+    while (added && result.length < 16) {
+      added = false;
+      for (const chain of blockchains) {
+        if (grouped[chain] && grouped[chain][i]) {
+          result.push(grouped[chain][i]);
+          added = true;
+        }
+      }
+      i++;
+    }
+    return result;
+  };
+
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-      >
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.headerText}>
-            <Text style={styles.title}>DexScreener Pro</Text>
-            <Text style={styles.subtitle}>Complete Crypto Analytics</Text>
+      <Animated.View style={[styles.animatedContainer, { opacity: fadeAnim }]}>
+        <ScrollView
+          style={styles.scrollView}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Header */}
+          <View style={styles.header}>
+            <View style={styles.headerText}>
+              <Text style={styles.title}>DexScreener Pro</Text>
+              <Text style={styles.subtitle}>Boosted Token Analytics</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <ThemeToggle />
+              <TouchableOpacity 
+                style={styles.searchButton}
+                onPress={() => router.push('/(tabs)/tokens')}
+              >
+                <Ionicons name="search" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.headerActions}>
-            <ThemeToggle />
-            <TouchableOpacity 
-              style={styles.searchButton}
-              onPress={() => router.push('/(tabs)/search')}
-            >
-              <Ionicons name="search" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        {/* Portfolio Summary */}
-        <View style={styles.portfolioCard}>
-          <Text style={styles.portfolioLabel}>Portfolio Value</Text>
-          <Text style={styles.portfolioValue}>
-            ${portfolioValue.toLocaleString()}
-          </Text>
-          <View style={styles.portfolioChange}>
-            <Ionicons 
-              name={isPortfolioPositive ? "trending-up" : "trending-down"} 
-              size={16} 
-              color={isPortfolioPositive ? '#10b981' : '#ef4444'} 
-            />
-            <Text style={[
-              styles.portfolioChangeText,
-              { color: isPortfolioPositive ? '#10b981' : '#ef4444' }
-            ]}>
-              {isPortfolioPositive ? '+' : ''}{portfolioChange.toFixed(2)}% (24h)
+          {/* Portfolio Summary */}
+          <Animated.View 
+            style={[
+              styles.portfolioCard,
+              {
+                transform: [{
+                  translateY: fadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [50, 0],
+                  })
+                }]
+              }
+            ]}
+          >
+            <Text style={styles.portfolioLabel}>Portfolio Value</Text>
+            <Text style={styles.portfolioValue}>
+              ${portfolioValue.toLocaleString()}
             </Text>
-          </View>
-          <Text style={styles.portfolioSubtext}>
-            {watchlist?.length} tokens tracked
-          </Text>
-        </View>
-
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <StatsCard
-            icon="list"
-            title="Tokens"
-            value={dashboardData?.searchResults?.length.toString()}
-            color="#3b82f6"
-          />
-          <StatsCard
-            icon="people"
-            title="Profiles"
-            value={dashboardData?.profiles?.length.toString()}
-            color="#8b5cf6"
-          />
-          <StatsCard
-            icon="flash"
-            title="Boosted"
-            value={dashboardData?.boostedTop?.length.toString()}
-            color="#eab308"
-          />
-          <StatsCard
-            icon="trending-up"
-            title="Trending"
-            value="8"
-            color="#10b981"
-          />
-        </View>
-
-        {/* Quick Actions */}
-        <View style={styles.quickActions}>
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/tokens')}
-          >
-            <Ionicons name="list" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-            <Text style={styles.actionButtonText}>All Tokens</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/portfolio')}
-          >
-            <Ionicons name="briefcase" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-            <Text style={styles.actionButtonText}>My Portfolio</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Boosted Tokens */}
-        {dashboardData.boostedTop?.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Ionicons name="flash" size={20} color="#eab308" />
-                <Text style={styles.sectionTitle}>Top Boosted</Text>
-              </View>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/boosted')}>
-                <Text style={styles.viewAllText}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            {dashboardData.boostedTop.map((token, index) => (
-              <View key={index} style={styles.boostedTokenCard}>
-                <View style={styles.boostedTokenIcon}>
-                  <Ionicons name="flash" size={20} color="#ffffff" />
-                </View>
-                <View style={styles.boostedTokenInfo}>
-                  <Text style={styles.boostedTokenTitle}>
-                    {token.tokenAddress?.slice(0, 8)}...
-                  </Text>
-                  <Text style={styles.boostedTokenSubtitle}>
-                    {token.totalAmount} boosts • ${token.amount}
-                  </Text>
-                </View>
-                <View style={styles.boostedBadge}>
-                  <Text style={styles.boostedBadgeText}>Boosted</Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Trending Tokens */}
-        {dashboardData?.searchResults?.length > 0 && (
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <View style={styles.sectionTitleContainer}>
-                <Ionicons name="trending-up" size={20} color="#10b981" />
-                <Text style={styles.sectionTitle}>Trending Pairs</Text>
-              </View>
-              <TouchableOpacity onPress={() => router.push('/(tabs)/tokens')}>
-                <Text style={styles.viewAllText}>View All</Text>
-              </TouchableOpacity>
-            </View>
-            {dashboardData?.searchResults?.slice(0, 5).map((token, index) => (
-              <TokenCard 
-                key={index} 
-                token={token} 
-                onPress={() => {
-                  // Navigate to token detail - would need to implement
-                  console.log('Navigate to token:', token);
-                }}
+            <View style={styles.portfolioChange}>
+              <Ionicons 
+                name={isPortfolioPositive ? "trending-up" : "trending-down"} 
+                size={16} 
+                color={isPortfolioPositive ? '#10b981' : '#ef4444'} 
               />
-            ))}
-          </View>
-        )}
-      </ScrollView>
+              <Text style={[
+                styles.portfolioChangeText,
+                { color: isPortfolioPositive ? '#10b981' : '#ef4444' }
+              ]}>
+                {isPortfolioPositive ? '+' : ''}{portfolioChange.toFixed(2)}% (24h)
+              </Text>
+            </View>
+            <Text style={styles.portfolioSubtext}>
+              {watchlist?.length} tokens tracked
+            </Text>
+          </Animated.View>
+
+          {/* Stats Grid */}
+          <Animated.View 
+            style={[
+              styles.statsGrid,
+              {
+                transform: [{
+                  translateY: fadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [30, 0],
+                  })
+                }]
+              }
+            ]}
+          >
+            <StatsCard
+              icon="flash"
+              title="Boosted Tokens"
+              value={boostedTokens.length.toString()}
+              color="#eab308"
+            />
+            <StatsCard
+              icon="briefcase"
+              title="Portfolio"
+              value={watchlist?.length.toString()}
+              color="#3b82f6"
+            />
+            <StatsCard
+              icon="trending-up"
+              title="Active"
+              value="24/7"
+              color="#10b981"
+            />
+            <StatsCard
+              icon="layers"
+              title="Chains"
+              value="8"
+              color="#f59e0b"
+            />
+          </Animated.View>
+
+          {/* Quick Actions */}
+          <Animated.View 
+            style={[
+              styles.quickActions,
+              {
+                transform: [{
+                  translateY: fadeAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [20, 0],
+                  })
+                }]
+              }
+            ]}
+          >
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/(tabs)/tokens')}
+            >
+              <Ionicons name="flash" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+              <Text style={styles.actionButtonText}>All Boosted Tokens</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={styles.actionButton}
+              onPress={() => router.push('/(tabs)/portfolio')}
+            >
+              <Ionicons name="briefcase" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+              <Text style={styles.actionButtonText}>My Portfolio</Text>
+            </TouchableOpacity>
+          </Animated.View>
+
+          {/* Boosted Tokens Section */}
+          {boostedTokens.length > 0 && (
+            <Animated.View 
+              style={[
+                styles.section,
+                {
+                  opacity: fadeAnim,
+                  transform: [{
+                    translateY: fadeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [40, 0],
+                    })
+                  }]
+                }
+              ]}
+            >
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleContainer}>
+                  <Ionicons name="flash" size={20} color="#eab308" />
+                  <Text style={styles.sectionTitle}>Boosted Tokens</Text>
+                </View>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/tokens')}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
+              
+              {boostedTokens
+                .filter(token => token && typeof token === 'object')
+                .slice(0, 6)
+                .map((token, index) => (
+                <Animated.View 
+                  key={token.id || token.tokenAddress || `boosted-${index}`} 
+                  style={[
+                    {
+                      opacity: fadeAnim,
+                      transform: [{
+                        translateX: fadeAnim.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [index % 2 === 0 ? -50 : 50, 0],
+                        })
+                      }]
+                    }
+                  ]}
+                >
+                  <TokenCard 
+                    token={token} 
+                    onPress={() => router.push({ pathname: '/(tabs)/tokens/detail', params: { token: JSON.stringify(token) } } as any)}
+                  />
+                </Animated.View>
+              ))}
+            </Animated.View>
+          )}
+
+          {/* Trending Pairs Section */}
+          {trendingPairs.length > 0 && (
+            <Animated.View style={[styles.section, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [60, 0] }) }] }] }>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionTitleContainer}>
+                  <Ionicons name="trending-up" size={20} color="#10b981" />
+                  <Text style={styles.sectionTitle}>Trending Pairs</Text>
+                </View>
+                <TouchableOpacity onPress={() => router.push('/(tabs)/tokens')}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
+              </View>
+              {interleavePairs(trendingPairs, ["solana", "ETH", "bsc", "polygon", "arbitrum", "avalanche", "optimism", "base"])
+                .filter(pair => pair && typeof pair === 'object')
+                .map((pair, index) => (
+                <Animated.View 
+                  key={`${pair.pairAddress || pair.id || pair.address || 'pair'}-${pair._chain || ''}-${index}`} 
+                  style={{ opacity: fadeAnim, transform: [{ translateX: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [index % 2 === 0 ? 50 : -50, 0] }) }] }}
+                >
+                  <TokenCard 
+                    token={pair} 
+                    onPress={() => router.push({ pathname: '/(tabs)/tokens/detail', params: { token: JSON.stringify(pair) } } as any)}
+                  />
+                  <Text style={{ fontSize: 12, color: '#64748b', marginLeft: 8, marginBottom: 8 }}>Chain: {pair._chain}</Text>
+                </Animated.View>
+              ))}
+            </Animated.View>
+          )}
+        </ScrollView>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -245,6 +391,9 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: isDark ? '#0f172a' : '#f8fafc',
+  },
+  animatedContainer: {
+    flex: 1,
   },
   scrollView: {
     flex: 1,
@@ -287,6 +436,8 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    borderWidth: 1,
+    borderColor: isDark ? '#334155' : '#e2e8f0',
   },
   portfolioCard: {
     margin: 16,
@@ -352,6 +503,8 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 8,
     elevation: 4,
+    borderWidth: 1,
+    borderColor: isDark ? '#334155' : '#e2e8f0',
   },
   actionButtonText: {
     fontSize: 16,
@@ -383,52 +536,5 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-SemiBold',
     color: '#3b82f6',
-  },
-  boostedTokenCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    marginBottom: 12,
-    borderRadius: 12,
-    backgroundColor: isDark ? '#1e293b' : '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
-  },
-  boostedTokenIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#eab308',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 12,
-  },
-  boostedTokenInfo: {
-    flex: 1,
-  },
-  boostedTokenTitle: {
-    fontSize: 16,
-    fontFamily: 'Inter-Bold',
-    color: isDark ? '#ffffff' : '#1e293b',
-    marginBottom: 4,
-  },
-  boostedTokenSubtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter-Regular',
-    color: isDark ? '#94a3b8' : '#64748b',
-  },
-  boostedBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: '#eab308',
-  },
-  boostedBadgeText: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
   },
 });

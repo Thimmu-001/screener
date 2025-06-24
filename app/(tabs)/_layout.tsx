@@ -56,29 +56,20 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="portfolio"
-        options={{
-          title: 'Portfolio',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="briefcase" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="profiles"
-        options={{
-          title: 'Profiles',
-          tabBarIcon: ({ size, color }) => (
-            <Ionicons name="person-circle" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="boosted"
         options={{
           title: 'Boosted',
           tabBarIcon: ({ size, color }) => (
             <Ionicons name="flash" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio"
+        options={{
+          title: 'Portfolio',
+          tabBarIcon: ({ size, color }) => (
+            <Ionicons name="briefcase" size={size} color={color} />
           ),
         }}
       />

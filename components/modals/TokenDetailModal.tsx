@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import { useTokenStore } from '@/lib/store';
 import { dexAPI } from '@/lib/api';
+import { useTheme } from '@/providers/ThemeProvider';
 
 const { width, height } = Dimensions.get('window');
 
@@ -29,8 +30,8 @@ interface TokenDetailModalProps {
 type TimeFrame = '1D' | '1W' | '1M' | '1Y';
 
 export function TokenDetailModal({ token, visible, onClose }: TokenDetailModalProps) {
+  const { isDark } = useTheme();
   const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useTokenStore();
   
   const [loading, setLoading] = useState(false);
@@ -600,5 +601,23 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     fontSize: 14,
     fontFamily: 'Inter-Bold',
     color: isDark ? '#94a3b8' : '#64748b',
+  },
+  modalBackground: {
+    backgroundColor: isDark ? 'rgba(15,23,42,0.95)' : 'rgba(255,255,255,0.98)',
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  card: {
+    backgroundColor: isDark ? '#1e293b' : '#fff',
+    borderRadius: 16,
+    padding: 20,
+    shadowColor: isDark ? '#000' : '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: isDark ? 0.4 : 0.1,
+    shadowRadius: 8,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: isDark ? '#334155' : '#e5e7eb',
   },
 });

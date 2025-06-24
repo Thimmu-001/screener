@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/providers/ThemeProvider';
 
 interface StatsCardProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -10,8 +11,7 @@ interface StatsCardProps {
 }
 
 export function StatsCard({ icon, title, value, color }: StatsCardProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { isDark } = useTheme();
   const styles = getStyles(isDark, color);
 
   return (
@@ -59,14 +59,14 @@ const getStyles = (isDark: boolean, color: string) => StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 12,
-    fontFamily: 'Inter-SemiBold',
-    color: isDark ? '#94a3b8' : '#64748b',
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: isDark ? '#f1f5f9' : '#0f172a',
     marginBottom: 2,
   },
   value: {
     fontSize: 18,
-    fontFamily: 'Inter-Bold',
-    color: isDark ? '#ffffff' : '#1e293b',
+    fontWeight: 'bold',
+    color: isDark ? '#f1f5f9' : '#0f172a',
   },
 });

@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, useColorScheme } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useTheme } from '@/providers/ThemeProvider';
 
 interface TokenCardProps {
   token: any;
@@ -9,8 +10,7 @@ interface TokenCardProps {
 }
 
 export function TokenCard({ token, onPress, compact = false }: TokenCardProps) {
-  const colorScheme = useColorScheme();
-  const isDark = colorScheme === 'dark';
+  const { isDark } = useTheme();
   const styles = getStyles(isDark, compact);
 
   const formatNumber = (num: number | string) => {
@@ -127,25 +127,25 @@ const getStyles = (isDark: boolean, compact: boolean) => StyleSheet.create({
     marginBottom: 4,
   },
   tokenSymbol: {
-    fontSize: compact ? 14 : 16,
-    fontFamily: 'Inter-Bold',
-    color: isDark ? '#ffffff' : '#1e293b',
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: isDark ? '#f1f5f9' : '#0f172a',
+    marginBottom: 2,
   },
   boostedBadge: {
-    marginLeft: 8,
+    backgroundColor: isDark ? '#fde047' : '#eab308',
+    borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
-    borderRadius: 4,
-    backgroundColor: '#eab308',
+    marginLeft: 8,
   },
   boostedBadgeText: {
     fontSize: 10,
-    fontFamily: 'Inter-SemiBold',
-    color: '#ffffff',
+    color: '#1e293b',
+    fontWeight: 'bold',
   },
   tokenPrice: {
-    fontSize: compact ? 12 : 14,
-    fontFamily: 'Inter-SemiBold',
+    fontSize: 14,
     color: isDark ? '#94a3b8' : '#64748b',
   },
   rightSection: {
@@ -157,13 +157,12 @@ const getStyles = (isDark: boolean, compact: boolean) => StyleSheet.create({
     marginBottom: 4,
   },
   priceChangeText: {
-    fontSize: compact ? 12 : 14,
-    fontFamily: 'Inter-Bold',
-    marginLeft: 4,
+    fontSize: 12,
+    marginLeft: 2,
   },
   volumeText: {
-    fontSize: compact ? 10 : 12,
-    fontFamily: 'Inter-SemiBold',
-    color: isDark ? '#64748b' : '#94a3b8',
+    fontSize: 12,
+    color: isDark ? '#f1f5f9' : '#0f172a',
+    marginTop: 2,
   },
 });

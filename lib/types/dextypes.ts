@@ -36,6 +36,7 @@ export interface BoostedToken {
 export interface SearchPair {
   pairAddress: string;
   baseToken: {
+    [x: string]: any;
     address: string;
     symbol: string;
     name: string;
