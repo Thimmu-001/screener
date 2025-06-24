@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import {TokenCard} from '../ui/TokenCard';
 import {StatsCard} from '../ui/StatsCard';
+import { ThemeToggle } from '../ui/ThemeToggle';
 import { dexAPI } from '@/lib/api';
 import { useTokenStore } from '@/lib/store';
 import { DashboardData } from '@/lib/types/dextypes';
@@ -97,12 +98,15 @@ export default function DashboardScreen() {
             <Text style={styles.title}>DexScreener Pro</Text>
             <Text style={styles.subtitle}>Complete Crypto Analytics</Text>
           </View>
-          <TouchableOpacity 
-            style={styles.searchButton}
-            onPress={() => router.push('/(tabs)/search')}
-          >
-            <Ionicons name="search" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-          </TouchableOpacity>
+          <View style={styles.headerActions}>
+            <ThemeToggle />
+            <TouchableOpacity 
+              style={styles.searchButton}
+              onPress={() => router.push('/(tabs)/search')}
+            >
+              <Ionicons name="search" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Portfolio Summary */}
@@ -132,28 +136,28 @@ export default function DashboardScreen() {
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
           <StatsCard
+            icon="list"
+            title="Tokens"
+            value={dashboardData?.searchResults?.length.toString()}
+            color="#3b82f6"
+          />
+          <StatsCard
             icon="people"
             title="Profiles"
             value={dashboardData?.profiles?.length.toString()}
-            color="#3b82f6"
+            color="#8b5cf6"
           />
           <StatsCard
             icon="flash"
             title="Boosted"
             value={dashboardData?.boostedTop?.length.toString()}
-            color="#8b5cf6"
+            color="#eab308"
           />
           <StatsCard
             icon="trending-up"
             title="Trending"
-            value={dashboardData?.searchResults?.length.toString()}
-            color="#10b981"
-          />
-          <StatsCard
-            icon="layers"
-            title="Chains"
             value="8"
-            color="#f59e0b"
+            color="#10b981"
           />
         </View>
 
@@ -161,17 +165,17 @@ export default function DashboardScreen() {
         <View style={styles.quickActions}>
           <TouchableOpacity 
             style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/profiles')}
+            onPress={() => router.push('/(tabs)/tokens')}
           >
-            <Ionicons name="people" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-            <Text style={styles.actionButtonText}>Token Profiles</Text>
+            <Ionicons name="list" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+            <Text style={styles.actionButtonText}>All Tokens</Text>
           </TouchableOpacity>
           <TouchableOpacity 
             style={styles.actionButton}
-            onPress={() => router.push('/(tabs)/boosted')}
+            onPress={() => router.push('/(tabs)/portfolio')}
           >
-            <Ionicons name="flash" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-            <Text style={styles.actionButtonText}>Boosted Tokens</Text>
+            <Ionicons name="briefcase" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
+            <Text style={styles.actionButtonText}>My Portfolio</Text>
           </TouchableOpacity>
         </View>
 
@@ -216,8 +220,11 @@ export default function DashboardScreen() {
                 <Ionicons name="trending-up" size={20} color="#10b981" />
                 <Text style={styles.sectionTitle}>Trending Pairs</Text>
               </View>
+              <TouchableOpacity onPress={() => router.push('/(tabs)/tokens')}>
+                <Text style={styles.viewAllText}>View All</Text>
+              </TouchableOpacity>
             </View>
-            {dashboardData?.searchResults?.map((token, index) => (
+            {dashboardData?.searchResults?.slice(0, 5).map((token, index) => (
               <TokenCard 
                 key={index} 
                 token={token} 
@@ -252,6 +259,10 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
   },
   headerText: {
     flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    gap: 8,
   },
   title: {
     fontSize: 28,

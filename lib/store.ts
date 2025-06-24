@@ -13,6 +13,12 @@ interface Token {
   liquidity?: number;
   pairAddress?: string;
   baseToken?: any;
+  address?: string;
+  logoUri?: string;
+  chainId?: string;
+  priceUsd?: string;
+  priceChange?: { h24: number };
+  volume?: { h24: number };
 }
 
 interface TokenStore {
@@ -23,6 +29,7 @@ interface TokenStore {
   addToWatchlist: (token: any) => void;
   removeFromWatchlist: (tokenId: string) => void;
   isInWatchlist: (tokenId: string) => boolean;
+  updatePortfolioValue: (value: number) => void;
 }
 
 export const useTokenStore = create<TokenStore>()(
@@ -36,7 +43,7 @@ export const useTokenStore = create<TokenStore>()(
 
       addToWatchlist: (token) => {
         const { watchlist } = get();
-        const tokenId = token.pairAddress || token.id || Date.now().toString();
+        const tokenId = token.pairAddress || token.id || token.address || Date.now().toString();
 
         if (watchlist.some((t) => t.id === tokenId)) return;
 
@@ -51,6 +58,12 @@ export const useTokenStore = create<TokenStore>()(
           liquidity: token.liquidity?.usd,
           pairAddress: token.pairAddress,
           baseToken: token.baseToken,
+          address: token.address || token.baseToken?.address,
+          logoUri: token.logoUri || token.baseToken?.logoUri,
+          chainId: token.chainId,
+          priceUsd: token.priceUsd,
+          priceChange: token.priceChange,
+          volume: token.volume,
         };
 
         set((state) => ({
@@ -67,10 +80,12 @@ export const useTokenStore = create<TokenStore>()(
         const { watchlist } = get();
         return watchlist.some((token) => token.id === tokenId);
       },
+
+      updatePortfolioValue: (value) => set({ portfolioValue: value }),
     }),
     {
       name: 'dex-screener-storage',
-      storage: createJSONStorage(() => AsyncStorage),  // <-- REPLACED HERE!
+      storage: createJSONStorage(() => AsyncStorage),
     }
   )
 );

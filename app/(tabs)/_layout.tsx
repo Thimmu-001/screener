@@ -38,11 +38,29 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="tokens"
+        options={{
+          title: 'Tokens',
+          tabBarIcon: ({ size, color }) => (
+            <Ionicons name="list" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="search"
         options={{
           title: 'Search',
           tabBarIcon: ({ size, color }) => (
             <Ionicons name="search" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio"
+        options={{
+          title: 'Portfolio',
+          tabBarIcon: ({ size, color }) => (
+            <Ionicons name="briefcase" size={size} color={color} />
           ),
         }}
       />
