@@ -17,6 +17,29 @@ import { dexAPI } from '@/lib/api';
 import { useTokenStore } from '@/lib/store';
 import { useTheme } from '@/providers/ThemeProvider';
 import { router } from 'expo-router';
+import { TokenDetailModal } from '../modals/TokenDetailModal';
+
+// Types for BoostedToken
+interface BoostedToken {
+  id: string;
+  tokenAddress: string;
+  symbol: string;
+  name: string;
+  priceUsd: string;
+  priceChange: { h24: number };
+  volume: { h24: number };
+  marketCap: number;
+  liquidity: { usd: number };
+  chainId: string;
+  address: string;
+  boosted: boolean;
+  baseToken: {
+    symbol: string;
+    name: string;
+    address: string;
+  };
+  [key: string]: any;
+}
 
 export default function DashboardScreen() {
   const { isDark } = useTheme();
@@ -25,13 +48,12 @@ export default function DashboardScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
-  const [boostedTokens, setBoostedTokens] = useState<any[]>([]);
-  const [trendingPairs, setTrendingPairs] = useState<any[]>([]);
+  const [boostedTokens, setBoostedTokens] = useState<BoostedToken[]>([]);
+  const [selectedToken, setSelectedToken] = useState<BoostedToken | null>(null);
   const styles = getStyles(isDark);
 
   useEffect(() => {
-    fetchBoostedTokens();
-    fetchTrendingPairs();
+    fetchDashboardTokens();
     
     // Fade in animation
     Animated.timing(fadeAnim, {
@@ -41,96 +63,56 @@ export default function DashboardScreen() {
     }).start();
   }, []);
 
-  const fetchBoostedTokens = async () => {
+  // Fetch tokens for dashboard using the same logic as TokensScreen
+  const fetchDashboardTokens = async () => {
     try {
       setLoading(true);
-
-      // Fetch only boosted tokens
-      const [boostedLatest, boostedTop] = await Promise.all([
-        dexAPI.getLatestBoostedTokens().catch(() => []),
-        dexAPI.getTopBoostedTokens().catch(() => []),
-      ]);
-
-      // Transform boosted tokens to display format
-      const allBoostedTokens = [...boostedTop, ...boostedLatest];
-      const transformedTokens = allBoostedTokens.map((token, index) => ({
-        ...token,
-        id: token.tokenAddress || `boosted-${index}`,
-        symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
-        name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
-        priceUsd: (Math.random() * 100).toFixed(6),
-        priceChange: { h24: (Math.random() - 0.5) * 20 },
-        volume: { h24: token.amount * 1000 + Math.random() * 50000 },
-        marketCap: token.amount * 10000 + Math.random() * 1000000,
-        liquidity: { usd: token.amount * 500 + Math.random() * 100000 },
-        chainId: 'ethereum',
-        address: token.tokenAddress,
-        boosted: true,
-        baseToken: {
-          symbol: token.tokenAddress?.slice(0, 6).toUpperCase() || 'TOKEN',
-          name: `Boosted Token ${token.tokenAddress?.slice(0, 8)}`,
-          address: token.tokenAddress,
+      const chains = ['ethereum', 'bsc', 'polygon', 'arbitrum', 'optimism', 'avalanche', 'solana'];
+      const searchPromises = chains.map(chain =>
+        dexAPI.searchPairs(chain).catch(() => ({ pairs: [] }))
+      );
+      const results = await Promise.all(searchPromises);
+      const allPairs = results.flatMap(result => Array.isArray(result.pairs) ? result.pairs : []);
+      // Transform pairs to tokens and deduplicate
+      const tokenMap = new Map<string, any>();
+      allPairs.forEach(pair => {
+        if (!pair || typeof pair !== 'object' || !pair.baseToken || !pair.baseToken.address || !pair.chainId) return;
+        const tokenKey = `${pair.baseToken.address}-${pair.chainId}`;
+        const existingToken = tokenMap.get(tokenKey);
+        if (existingToken) {
+          existingToken.volume = existingToken.volume || { h24: 0 };
+          existingToken.liquidity = existingToken.liquidity || { usd: 0 };
+          existingToken.volume.h24 += pair.volume?.h24 || 0;
+          existingToken.liquidity.usd += pair.liquidity?.usd || 0;
+        } else {
+          tokenMap.set(tokenKey, {
+            ...pair,
+            id: tokenKey,
+            symbol: pair.baseToken.symbol,
+            name: pair.baseToken.name,
+            address: pair.baseToken.address,
+            logoUri: pair.baseToken.logoUri,
+            volume: pair.volume || { h24: 0 },
+            liquidity: pair.liquidity || { usd: 0 },
+          });
         }
-      }));
-
-      setBoostedTokens(transformedTokens.slice(0, 10));
-      setTopTokens(transformedTokens.slice(0, 8));
+      });
+      const uniqueTokens = Array.from(tokenMap.values())
+        .filter(token => token.volume?.h24 > 1000)
+        .slice(0, 20); // Show top 20 for dashboard
+      setBoostedTokens(uniqueTokens);
     } catch (error) {
       console.error('Dashboard fetch error:', error);
+      setBoostedTokens([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const fetchTrendingPairs = async () => {
-    try {
-      const blockchains: { chain: string; query: string }[] = [
-        { chain: "solana", query: "USDT" },
-        { chain: "ETH", query: "USDT" },
-        { chain: "bsc", query: "USDT" },
-        { chain: "polygon", query: "USDT" },
-        { chain: "arbitrum", query: "USDT" },
-        { chain: "avalanche", query: "USDT" },
-        { chain: "optimism", query: "USDT" },
-        { chain: "base", query: "USDT" },
-      ];
-      const searchPromises = blockchains.map(({ chain, query }) =>
-        dexAPI.searchPairs(query).then(
-          (result: any) => {
-            if (!result || !Array.isArray(result.pairs)) {
-              console.warn('Unexpected result from searchPairs:', result);
-              return { chain, pairs: [] };
-            }
-            // Only keep pairs with required fields
-            const validPairs = result.pairs.filter(
-              (pair: any) => pair && typeof pair === 'object' && pair.pairAddress && pair.baseToken && pair.quoteToken
-            ).map((pair: any) => ({ ...pair, _chain: chain }));
-            return { chain, pairs: validPairs };
-          }
-        ).catch((err: any) => {
-          console.warn('Error fetching pairs for', chain, err);
-          return { chain, pairs: [] };
-        })
-      );
-      const searchResults = await Promise.all(searchPromises);
-      // Merge all pairs
-      const allPairs: TrendingPair[] = searchResults.reduce((acc: TrendingPair[], { pairs }) => {
-        if (Array.isArray(pairs)) {
-          acc.push(...pairs);
-        }
-        return acc;
-      }, []);
-      setTrendingPairs(allPairs);
-    } catch (error) {
-      console.error('Dashboard fetch error:', error);
-      setTrendingPairs([]);
-    }
-  };
-
   const onRefresh = () => {
     setRefreshing(true);
-    fetchBoostedTokens();
+    fetchDashboardTokens();
   };
 
   const portfolioChange = 12.5;
@@ -172,7 +154,7 @@ export default function DashboardScreen() {
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerText}>
-              <Text style={styles.title}>DexScreener Pro</Text>
+              <Text style={styles.title}>Believe Screener</Text>
               <Text style={styles.subtitle}>Boosted Token Analytics</Text>
             </View>
             <View style={styles.headerActions}>
@@ -238,7 +220,7 @@ export default function DashboardScreen() {
           >
             <StatsCard
               icon="flash"
-              title="Boosted Tokens"
+              title="Total Market Cap"
               value={boostedTokens.length.toString()}
               color="#eab308"
             />
@@ -281,7 +263,7 @@ export default function DashboardScreen() {
               onPress={() => router.push('/(tabs)/tokens')}
             >
               <Ionicons name="flash" size={20} color={isDark ? '#94a3b8' : '#64748b'} />
-              <Text style={styles.actionButtonText}>All Boosted Tokens</Text>
+              <Text style={styles.actionButtonText}>Boosted Tokens</Text>
             </TouchableOpacity>
             <TouchableOpacity 
               style={styles.actionButton}
@@ -292,8 +274,8 @@ export default function DashboardScreen() {
             </TouchableOpacity>
           </Animated.View>
 
-          {/* Boosted Tokens Section */}
-          {boostedTokens.length > 0 && (
+          {/* Tokens Section (like TokensScreen) */}
+          {boostedTokens.length > 0 ? (
             <Animated.View 
               style={[
                 styles.section,
@@ -310,66 +292,40 @@ export default function DashboardScreen() {
             >
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionTitleContainer}>
-                  <Ionicons name="flash" size={20} color="#eab308" />
-                  <Text style={styles.sectionTitle}>Boosted Tokens</Text>
+                  <Ionicons name="trending-up" size={20} color="#10b981" />
+                  <Text style={styles.sectionTitle}>Trending Tokens</Text>
                 </View>
                 <TouchableOpacity onPress={() => router.push('/(tabs)/tokens')}>
                   <Text style={styles.viewAllText}>View All</Text>
                 </TouchableOpacity>
               </View>
-              
-              {boostedTokens.slice(0, 6).map((token, index) => (
-                <Animated.View 
-                  key={token.id || token.tokenAddress || `boosted-${index}`} 
-                  style={[
-                    {
-                      opacity: fadeAnim,
-                      transform: [{
-                        translateX: fadeAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [index % 2 === 0 ? -50 : 50, 0],
-                        })
-                      }]
-                    }
-                  ]}
-                >
-                  <TokenCard 
-                    token={token} 
-                    onPress={() => router.push({ pathname: '/(tabs)/tokens/detail', params: { token: JSON.stringify(token) } } as any)}
-                  />
-                </Animated.View>
-              ))}
-            </Animated.View>
-          )}
-
-          {/* Trending Pairs Section */}
-          {trendingPairs.length > 0 && (
-            <Animated.View style={[styles.section, { opacity: fadeAnim, transform: [{ translateY: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [60, 0] }) }] }] }>
-              <View style={styles.sectionHeader}>
-                <View style={styles.sectionTitleContainer}>
-                  <Ionicons name="trending-up" size={20} color="#10b981" />
-                  <Text style={styles.sectionTitle}>Trending Pairs</Text>
-                </View>
-                <TouchableOpacity onPress={() => router.push('/(tabs)/tokens/detail')}>
-                  <Text style={styles.viewAllText}>View All</Text>
-                </TouchableOpacity>
-              </View>
-              {interleavePairs(trendingPairs, ["solana", "ETH", "bsc", "polygon", "arbitrum", "avalanche", "optimism", "base"]).map((pair, index) => (
-                <Animated.View 
-                  key={`${pair.pairAddress || pair.id || pair.address || 'pair'}-${pair._chain || ''}-${index}`} 
+              {/* Render all boosted tokens, not just a subset */}
+              {boostedTokens.map((token, index) => (
+                <Animated.View
+                  key={token.id || token.address || `token-${index}`}
                   style={{ opacity: fadeAnim, transform: [{ translateX: fadeAnim.interpolate({ inputRange: [0, 1], outputRange: [index % 2 === 0 ? 50 : -50, 0] }) }] }}
                 >
-                  <TokenCard 
-                    token={pair} 
-                    onPress={() => router.push(`/(tabs)/tokens/detail?token=${encodeURIComponent(JSON.stringify(pair))}`)}
+                  <TokenCard
+                    token={token}
+                    onPress={() => setSelectedToken(token)}
                   />
-                  <Text style={{ fontSize: 12, color: '#64748b', marginLeft: 8, marginBottom: 8 }}>Chain: {pair._chain}</Text>
                 </Animated.View>
               ))}
             </Animated.View>
+          ) : (
+            <View style={{ alignItems: 'center', marginTop: 32 }}>
+              <Text style={{ color: isDark ? '#94a3b8' : '#64748b', fontSize: 16 }}>No tokens found.</Text>
+            </View>
           )}
         </ScrollView>
       </Animated.View>
+
+      {/* Token Detail Modal */}
+      <TokenDetailModal
+        token={selectedToken}
+        visible={!!selectedToken}
+        onClose={() => setSelectedToken(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -525,26 +481,3 @@ const getStyles = (isDark: boolean) => StyleSheet.create({
     color: '#3b82f6',
   },
 });
-
-// Add types for trending pairs
-interface TrendingPair {
-  pairAddress: string;
-  baseToken: {
-    address: string;
-    symbol: string;
-    name: string;
-    [key: string]: any;
-  };
-  quoteToken: {
-    address: string;
-    symbol: string;
-    name: string;
-    [key: string]: any;
-  };
-  priceUsd?: number;
-  liquidity?: { usd?: number };
-  volume?: { h24?: number };
-  chainId?: string;
-  _chain?: string;
-  [key: string]: any;
-}

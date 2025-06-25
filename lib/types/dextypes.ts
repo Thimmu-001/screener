@@ -27,6 +27,8 @@ export interface TokenProfile {
 }
 
 export interface BoostedToken {
+  id: string;
+  address: string;
   tokenAddress: string;
   totalAmount: number;
   amount: number;
